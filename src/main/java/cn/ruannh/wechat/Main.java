@@ -28,81 +28,31 @@ public class Main {
 
     /**
      *
-     * @param hexKey 微信数据库秘钥
+     * @param textKey 微信数据库秘钥
      * @param inDbPath 需要解密的数据库文件
      * @throws IOException
      */
-    public static void decryptDb(String hexKey, String inDbPath) throws IOException {
+    public static void decryptDb(String textKey, String inDbPath) throws IOException {
         Path filePath = FileSystems.getDefault().getPath(inDbPath);
         byte[] dbBuf = Files.readAllBytes(filePath);
         byte[] salt = new byte[16];
         System.arraycopy(dbBuf, 0, salt, 0, salt.length);
-        byte[] macSalt = new byte[16];
-
-        for(int i = 0; i < macSalt.length; ++i) {
-            macSalt[i] = (byte)(salt[i] ^ 58);
-        }
-        byte[] mKey = hexStrToByteArray(hexKey);
+        byte[] mKey = hexStrToByteArray(textKey);
         PBEParametersGenerator generator = new PKCS5S2ParametersGenerator(new SHA1Digest());
         generator.init(mKey, salt, 64000);
-        byte[] keyBytes = ((KeyParameter)generator.generateDerivedParameters(256)).getKey();
-        PBEParametersGenerator generatoorSha1 = new PKCS5S2ParametersGenerator(new SHA1Digest());
-        generatoorSha1.init(keyBytes, macSalt, 2);
-        byte[] ctxCode = ((KeyParameter)generatoorSha1.generateDerivedParameters(256)).getKey();
+        byte[] keyBytes = ((KeyParameter) generator.generateDerivedParameters(256)).getKey();
         int page = 1;
         int pTemp = 0;
         int pageLen = dbBuf.length;
         int offset = 16;
         byte[] result = new byte[4096];
         int loop = pageLen / 4096;
-        int n = 1;
-        int c = 1;
-        byte[] hexNum;
-        if (loop / 256 + 1 == 1) {
-            hexNum = new byte[4];
-        } else {
-            hexNum = new byte[loop / 256 + 1];
-        }
-
-        int count;
-        for(count = 0; count < hexNum.length; ++count) {
-            hexNum[count] = 0;
-        }
 
         System.out.println("数据库解密中...");
 
-        while(page <= loop) {
+        while (page <= loop) {
             try {
-                count = 4048 - offset + 16;
-                byte[] buffer = new byte[count];
                 System.out.println(inDbPath + " 解密数据页:" + page + "/" + loop);
-                System.arraycopy(dbBuf, pTemp + offset, buffer, 0, count);
-                SecretKeySpec signingKey = new SecretKeySpec(ctxCode, "HmacSHA1");
-                Mac mac = Mac.getInstance("HmacSHA1");
-                mac.init(signingKey);
-                if (c == 256) {
-                    hexNum[1] = (byte)n;
-                    ++n;
-                    c = 0;
-                }
-
-                hexNum[0] = (byte)c;
-                mac.update(buffer, 0, count);
-                mac.update(hexNum, 0, 4);
-                String hashSum = byteArray2Hex(mac.doFinal());
-                byte[] pageHash = new byte[20];
-                System.arraycopy(dbBuf, pTemp + 4096 - 48 + 16, pageHash, 0, 20);
-                //校验
-//                if (!hashSum.equals(byteArray2Hex(pageHash))) {
-//                    if (byteArray2Hex(pageHash).startsWith("0000")) {
-//                        System.out.println("解密完成，数据页:" + page);
-//                    } else {
-//                        System.out.println(byteArray2Hex(pageHash));
-//                        System.out.println("哈希值错误!");
-//                    }
-//
-//                    return;
-//                }
 
                 Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
                 SecretKeySpec decKey = new SecretKeySpec(keyBytes, "AES");
@@ -133,23 +83,11 @@ public class Main {
                 offset = 0;
                 pTemp += 4096;
                 ++page;
-                ++c;
             } catch (Exception e) {
                 System.out.println("解密数据库失败," + e.getMessage());
             }
         }
 
-    }
-
-    public static String byteArray2Hex(byte[] hash) {
-        Formatter formatter = new Formatter();
-
-        for(int i = 0; i < hash.length; ++i) {
-            byte b = hash[i];
-            formatter.format("%02x", b);
-        }
-
-        return formatter.toString();
     }
 
     public static byte[] hexStrToByteArray(String str) {
